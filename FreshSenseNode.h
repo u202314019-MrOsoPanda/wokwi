@@ -1,7 +1,16 @@
-#ifndef FRESHSENSE_NODE_H
-#define FRESHSENSE_NODE_H
+#pragma once
 
-#include <Arduino.h>
+// Firmware del dispositivo FreshSense.
+// Lo que hace sale del informe, rama develop:
+//   4.2.7 IoT Monitoring: la senal fisica es temperatura, humedad y etileno.
+//   4.2.7.1 SensorReading: deviceId, timestamp, temperatureC, humidityPct,
+//           ethylenePpm y meta. isValid() revisa que las tres magnitudes
+//           esten en un rango fisicamente posible.
+//   4.2.7.2 POST /api/v1/sensor-readings. El servidor valida el token (TS41).
+//   4.2.4.2 POST /api/v1/devices/{id}/heartbeat para no pasar a OFFLINE (US06).
+// La alerta (HIGH_ETHYLENE, TEMP_RISK, NEARING_EXPIRY) y el estado
+// FRESH / AT_RISK / SPOILED los calcula el servidor, no esta placa.
+
 #include <ArduinoJson.h>
 #include <DHTesp.h>
 #include <HTTPClient.h>
@@ -9,34 +18,64 @@
 #include <WiFiClientSecure.h>
 #include <time.h>
 
-// FreshSense cold-room node. Wiring matches the report, section 5.6:
-// DHT22 VCC -> 3V3, DHT22 GND -> GND, DHT22 SDA -> GPIO 12.
+// DHT22: temperatura y humedad. Dato en GPIO 12, alimentacion en 3V3.
+// El sensor de gas: etileno en ppm. Salida analogica en GPIO 34 (ADC1).
+static const int CLIMATE_PIN = 12;
+static const int ETHYLENE_PIN = 34;
 
-static const int DHT_PIN = 12;
-static const int STATUS_LED_PIN = 2;
-static const char *DEVICE_ID = "esp32-cocina-01";
+// Identificador que el servidor asigna al vincular el dispositivo (US31).
+// Hay que reemplazarlo por el UUID real del alta.
+static const char *DEVICE_ID = "00000000-0000-0000-0000-000000000001";
+
+// Token que DeviceTokenValidator revisa antes de aceptar la lectura (TS41).
+static const char *DEVICE_TOKEN = "replace-with-device-token";
+
+static const char *FIRMWARE_VERSION = "1.0";
+
+// Rutas tal como estan en el informe. El host es el backend publicado del equipo.
+static const char *READINGS_URL = "https://35-224-123-160.sslip.io/api/v1/sensor-readings";
+static const char *HEARTBEAT_URL = "https://35-224-123-160.sslip.io/api/v1/devices/00000000-0000-0000-0000-000000000001/heartbeat";
+
+// En Wokwi la red abierta es Wokwi-GUEST, canal 6.
 static const char *WIFI_SSID = "Wokwi-GUEST";
 static const char *WIFI_PASSWORD = "";
-static const int WIFI_CHANNEL = 6;
-static const char *EDGE_URL = "https://35-224-123-160.sslip.io/api/edge/readings";
-static const char *DEVICE_KEY = "replace-with-device-key";
-static const char *NTP_SERVER = "pool.ntp.org";
-static const long GMT_OFFSET_SEC = -5 * 3600;
-static const unsigned long SAMPLE_PERIOD_MS = 10000;
-static const float FRESH_MAX_C = 8.0f;
-static const float RISK_MAX_C = 12.0f;
 
-class Dht22Sensor {
+// America/Lima, sin horario de verano.
+static const long GMT_OFFSET_SEC = -5L * 3600L;
+static const int DAYLIGHT_OFFSET_SEC = 0;
+
+// El informe pide lectura periodica y heartbeat. En el simulador el periodo
+// es 10 s para poder ver cada envio en el monitor.
+static const unsigned long PERIOD_MS = 10000;
+
+// En el simulador, la posicion inicial del sensor de gas lee cerca de 3628.
+// Esa posicion se traduce a 35 ppm de etileno para llenar ethylenePpm.
+static const float GAS_RAW_AT_REFERENCE = 3628.0f;
+static const float GAS_PPM_AT_REFERENCE = 35.0f;
+
+// Rangos fisicos que usa isValid(), el metodo de SensorReading en el informe.
+static const float TEMP_MIN_C = -40.0f;
+static const float TEMP_MAX_C = 80.0f;
+static const float HUMIDITY_MIN = 0.0f;
+static const float HUMIDITY_MAX = 100.0f;
+static const float ETHYLENE_MIN_PPM = 0.0f;
+static const float ETHYLENE_MAX_PPM = 10000.0f;
+
+// Lee temperatureC y humidityPct.
+class ClimateSensor {
  public:
+  // El DHT22 necesita unos 2 s antes de la primera lectura valida.
   void begin() {
-    sensor.setup(DHT_PIN, DHTesp::DHT22);
+    sensor.setup(CLIMATE_PIN, DHTesp::DHT22);
     delay(sensor.getMinimumSamplingPeriod());
   }
 
   bool read(float &temperatureC, float &humidityPct) {
     TempAndHumidity sample = sensor.getTempAndHumidity();
-    if (sensor.getStatus() != DHTesp::ERROR_NONE || isnan(sample.temperature) ||
-        isnan(sample.humidity)) {
+    if (sensor.getStatus() != DHTesp::ERROR_NONE) {
+      return false;
+    }
+    if (isnan(sample.temperature) || isnan(sample.humidity)) {
       return false;
     }
     temperatureC = sample.temperature;
@@ -48,176 +87,208 @@ class Dht22Sensor {
   DHTesp sensor;
 };
 
+// Lee ethylenePpm. El informe exige esa magnitud en cada lectura.
+// Wokwi no trae un sensor de etileno, asi que el sensor de gas
+// aporta el valor en ppm.
+class EthyleneSensor {
+ public:
+  void begin() {
+    analogReadResolution(12);
+    analogSetPinAttenuation(ETHYLENE_PIN, ADC_11db);
+  }
+
+  float readPpm() {
+    int raw = analogRead(ETHYLENE_PIN);
+    if (raw < 0) {
+      raw = 0;
+    }
+    return raw * (GAS_PPM_AT_REFERENCE / GAS_RAW_AT_REFERENCE);
+  }
+};
+
+// Reloj de la lectura. El campo del informe se llama timestamp.
 class ReadingClock {
  public:
-  void begin() { configTime(GMT_OFFSET_SEC, 0, NTP_SERVER); }
+  void begin() {
+    configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, "pool.ntp.org", "time.nist.gov");
+  }
 
+  // ISO-8601 con la hora de Lima. Si el NTP aun no responde, usa un reloj local.
   String stamp() {
-    struct tm timeInfo;
-    if (!getLocalTime(&timeInfo, 1500) || timeInfo.tm_year < 120) {
-      time_t fallback = 1791477120 + millis() / 1000;
-      gmtime_r(&fallback, &timeInfo);
+    struct tm now;
+    if (!getLocalTime(&now, 1500) || now.tm_year < 120) {
+      time_t fallback = 1791459120L + (millis() / 1000L);
+      gmtime_r(&fallback, &now);
     }
-    char buffer[20];
-    strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M", &timeInfo);
+    char buffer[25];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &now);
     return String(buffer);
   }
 };
 
-class EdgePublisher {
+// Agregado SensorReading del informe: guarda las tres magnitudes,
+// descarta una lectura imposible y arma el JSON del recurso.
+class SensorReading {
+ public:
+  String deviceId;
+  String timestamp;
+  float temperatureC;
+  float humidityPct;
+  float ethylenePpm;
+  String meta;
+
+  // isValid() del informe: las tres magnitudes tienen que ser fisicamente posibles.
+  bool isValid() const {
+    if (temperatureC < TEMP_MIN_C || temperatureC > TEMP_MAX_C) {
+      return false;
+    }
+    if (humidityPct < HUMIDITY_MIN || humidityPct > HUMIDITY_MAX) {
+      return false;
+    }
+    if (ethylenePpm < ETHYLENE_MIN_PPM || ethylenePpm > ETHYLENE_MAX_PPM) {
+      return false;
+    }
+    return true;
+  }
+
+  // Campos de SensorReadingResource: deviceId, timestamp, temperatureC,
+  // humidityPct, ethylenePpm, meta.
+  String toJson() const {
+    String temperatureText(temperatureC, 1);
+    String humidityText(humidityPct, 1);
+    String ethyleneText(ethylenePpm, 1);
+
+    StaticJsonDocument<384> document;
+    document["deviceId"] = deviceId;
+    document["timestamp"] = timestamp;
+    document["temperatureC"] = serialized(temperatureText);
+    document["humidityPct"] = serialized(humidityText);
+    document["ethylenePpm"] = serialized(ethyleneText);
+    document["meta"] = meta;
+
+    String payload;
+    serializeJsonPretty(document, payload);
+    return payload;
+  }
+};
+
+// Envia la telemetria y el heartbeat. No evalua umbrales:
+// eso lo hace ThresholdEvaluationService en el servidor.
+class DeviceLink {
  public:
   bool connectWifi() {
-    if (WiFi.status() == WL_CONNECTED) {
-      return true;
-    }
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
-    unsigned long started = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - started < 8000) {
-      delay(100);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
+    for (int attempt = 0; attempt < 40 && WiFi.status() != WL_CONNECTED; attempt++) {
+      delay(250);
     }
     return WiFi.status() == WL_CONNECTED;
   }
 
-  int publish(const String &payload) {
-    if (!connectWifi()) {
-      return -1;
+  int rssi() const {
+    if (WiFi.status() != WL_CONNECTED) {
+      return 0;
     }
-    WiFiClientSecure client;
-    client.setInsecure();
-    HTTPClient http;
-    if (!http.begin(client, EDGE_URL)) {
-      return -2;
-    }
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("X-Device-Key", DEVICE_KEY);
-    int status = http.POST(payload);
-    http.end();
-    return status;
-  }
-};
-
-class FreshSenseNode {
- public:
-  void begin() {
-    pinMode(STATUS_LED_PIN, OUTPUT);
-    Serial.begin(115200);
-    sensor.begin();
-    Serial.println("FreshSense node");
-    Serial.print("Device ID: ");
-    Serial.println(DEVICE_ID);
-    online = publisher.connectWifi();
-    clock.begin();
-    Serial.print("Connection: ");
-    Serial.println(online ? "Connected" : "Disconnected");
-    lastSampleMs = millis() - SAMPLE_PERIOD_MS;
+    return WiFi.RSSI();
   }
 
-  void tick() {
-    unsigned long now = millis();
-    updateLed(now);
-    if (now - lastSampleMs < SAMPLE_PERIOD_MS) {
-      return;
-    }
-    lastSampleMs = now;
-    sample();
+  // POST /api/v1/sensor-readings (TS41).
+  int postReading(const String &payload) {
+    return post(READINGS_URL, payload);
+  }
+
+  // POST /api/v1/devices/{id}/heartbeat (US06).
+  int postHeartbeat(const String &payload) {
+    return post(HEARTBEAT_URL, payload);
   }
 
  private:
-  Dht22Sensor sensor;
-  ReadingClock clock;
-  EdgePublisher publisher;
-  unsigned long lastSampleMs = 0;
-  unsigned long lastBlinkMs = 0;
-  uint32_t sequence = 0;
-  bool ledOn = false;
-  bool alert = false;
-  bool online = false;
-
-  void sample() {
-    float temperatureC = 0;
-    float humidityPct = 0;
-    online = publisher.connectWifi();
-
-    Serial.println("---");
-    Serial.print("Connection: ");
-    Serial.println(online ? "Connected" : "Disconnected");
-
-    if (!sensor.read(temperatureC, humidityPct)) {
-      alert = true;
-      Serial.println("Monitoring Status: Disconnected");
-      Serial.println("Temperature: --");
-      Serial.println("Humidity: --");
-      return;
+  int post(const char *url, const String &payload) {
+    if (WiFi.status() != WL_CONNECTED) {
+      return -1;
     }
 
-    sequence++;
-    String readingId = "rd-" + padded(sequence);
-    String timestamp = clock.stamp();
-    const char *status = monitoringStatus(temperatureC);
-    alert = strcmp(status, "FRESH") != 0;
-
-    String temperatureText = oneDecimal(temperatureC);
-    String humidityText = oneDecimal(humidityPct);
-
-    StaticJsonDocument<256> document;
-    document["deviceId"] = DEVICE_ID;
-    document["id"] = readingId;
-    document["temperature"] = serialized(temperatureText);
-    document["humidity"] = serialized(humidityText);
-    document["time"] = timestamp;
-
-    String payload;
-    serializeJson(document, payload);
-
-    Serial.print("Monitoring Status: ");
-    Serial.println(status);
-    Serial.print("Temperature: ");
-    Serial.print(temperatureText);
-    Serial.println(" C");
-    Serial.print("Humidity: ");
-    Serial.print(humidityText);
-    Serial.println(" %");
-    Serial.print("Last Reading: ");
-    Serial.println(timestamp);
-    Serial.println(payload);
-
-    int httpStatus = publisher.publish(payload);
-    Serial.print("POST /api/edge/readings: ");
-    Serial.println(httpStatus);
-  }
-
-  void updateLed(unsigned long now) {
-    unsigned long period = !online ? 1200 : (alert ? 150 : 700);
-    if (now - lastBlinkMs < period) {
-      return;
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    if (!http.begin(client, url)) {
+      return -2;
     }
-    lastBlinkMs = now;
-    ledOn = !ledOn;
-    digitalWrite(STATUS_LED_PIN, ledOn ? HIGH : LOW);
-  }
 
-  static const char *monitoringStatus(float temperatureC) {
-    if (temperatureC <= FRESH_MAX_C) {
-      return "FRESH";
-    }
-    if (temperatureC <= RISK_MAX_C) {
-      return "AT_RISK";
-    }
-    return "TEMP_RISK";
-  }
-
-  static String padded(uint32_t value) {
-    char buffer[7];
-    snprintf(buffer, sizeof(buffer), "%06lu", static_cast<unsigned long>(value));
-    return String(buffer);
-  }
-
-  static String oneDecimal(float value) {
-    char buffer[12];
-    dtostrf(value, 0, 1, buffer);
-    return String(buffer);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-Device-Token", DEVICE_TOKEN);
+    int code = http.POST(payload);
+    http.end();
+    return code;
   }
 };
 
-#endif
+// Junta la medicion, la validacion y los dos envios del informe.
+class FreshSenseNode {
+ public:
+  void begin() {
+    Serial.begin(115200);
+    climate.begin();
+    ethylene.begin();
+    link.connectWifi();
+    clock.begin();
+    nextTickAt = millis();
+    Serial.println("FreshSense listo. Envia lectura y heartbeat.");
+  }
+
+  void tick() {
+    if (millis() < nextTickAt) {
+      return;
+    }
+    nextTickAt = millis() + PERIOD_MS;
+    publish();
+  }
+
+ private:
+  void publish() {
+    float temperatureC = 0.0f;
+    float humidityPct = 0.0f;
+    if (!climate.read(temperatureC, humidityPct)) {
+      Serial.println("Lectura de clima invalida. No se envia.");
+      return;
+    }
+
+    SensorReading reading;
+    reading.deviceId = DEVICE_ID;
+    reading.timestamp = clock.stamp();
+    reading.temperatureC = temperatureC;
+    reading.humidityPct = humidityPct;
+    reading.ethylenePpm = ethylene.readPpm();
+    reading.meta = String("firmware=") + FIRMWARE_VERSION + ";rssi=" + String(link.rssi());
+
+    Serial.println("SensorReading");
+    Serial.println(reading.toJson());
+
+    if (!reading.isValid()) {
+      Serial.println("isValid() rechazo la lectura. No se envia.");
+      return;
+    }
+
+    int readingCode = link.postReading(reading.toJson());
+    Serial.print("POST /api/v1/sensor-readings -> ");
+    Serial.println(readingCode);
+
+    StaticJsonDocument<128> heartbeat;
+    heartbeat["deviceId"] = DEVICE_ID;
+    heartbeat["timestamp"] = reading.timestamp;
+    String heartbeatPayload;
+    serializeJsonPretty(heartbeat, heartbeatPayload);
+
+    Serial.println("Heartbeat");
+    Serial.println(heartbeatPayload);
+    int heartbeatCode = link.postHeartbeat(heartbeatPayload);
+    Serial.print("POST /api/v1/devices/{id}/heartbeat -> ");
+    Serial.println(heartbeatCode);
+  }
+
+  ClimateSensor climate;
+  EthyleneSensor ethylene;
+  ReadingClock clock;
+  DeviceLink link;
+  unsigned long nextTickAt;
+};

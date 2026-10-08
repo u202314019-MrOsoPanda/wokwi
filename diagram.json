@@ -13,12 +13,19 @@
     {
       "type": "wokwi-dht22",
       "id": "dht22",
-      "top": 34.5,
-      "left": -168.6,
+      "top": -153.3,
+      "left": -187.8,
       "attrs": {
         "temperature": "6.4",
         "humidity": "82"
       }
+    },
+    {
+      "type": "wokwi-gas-sensor",
+      "id": "gas",
+      "top": 249.6,
+      "left": -230.2,
+      "attrs": {}
     }
   ],
   "connections": [
@@ -26,7 +33,10 @@
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
     [ "dht22:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "dht22:GND", "esp:GND.1", "black", [ "v0" ] ],
-    [ "dht22:SDA", "esp:12", "green", [ "v0" ] ]
+    [ "dht22:SDA", "esp:12", "green", [ "v0" ] ],
+    [ "gas:VCC", "esp:5V", "red", [ "v0" ] ],
+    [ "gas:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "gas:AOUT", "esp:34", "orange", [ "v0" ] ]
   ],
   "dependencies": {}
 }

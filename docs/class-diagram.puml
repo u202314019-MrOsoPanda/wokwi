@@ -1,10 +1,25 @@
 @startuml FreshSenseDevice
 skinparam classAttributeIconSize 0
 
-class Dht22Sensor {
-  - sensor : DHTesp
+class ClimateSensor {
   + begin()
   + read(temperatureC, humidityPct) : bool
+}
+
+class EthyleneSensor {
+  + begin()
+  + readPpm() : float
+}
+
+class SensorReading {
+  + deviceId : String
+  + timestamp : String
+  + temperatureC : float
+  + humidityPct : float
+  + ethylenePpm : float
+  + meta : String
+  + isValid() : bool
+  + toJson() : String
 }
 
 class ReadingClock {
@@ -12,28 +27,26 @@ class ReadingClock {
   + stamp() : String
 }
 
-class EdgePublisher {
+class DeviceLink {
   + connectWifi() : bool
-  + publish(payload) : int
+  + postReading(payload) : int
+  + postHeartbeat(payload) : int
 }
 
 class FreshSenseNode {
-  - sensor : Dht22Sensor
-  - clock : ReadingClock
-  - publisher : EdgePublisher
-  - sequence : uint32
   + begin()
   + tick()
 }
 
-FreshSenseNode *-- Dht22Sensor
+FreshSenseNode *-- ClimateSensor
+FreshSenseNode *-- EthyleneSensor
 FreshSenseNode *-- ReadingClock
-FreshSenseNode *-- EdgePublisher
+FreshSenseNode *-- DeviceLink
+FreshSenseNode ..> SensorReading
 
-note right of FreshSenseNode
-  Cold-room node.
-  Reads the DHT22 on GPIO 12,
-  builds the reading JSON and
-  posts it to /api/edge/readings.
+note right of SensorReading
+  Informe 4.2.7.
+  El servidor evalua umbrales
+  y emite las alertas.
 end note
 @enduml
