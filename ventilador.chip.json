@@ -1,0 +1,9 @@
+{
+  "name": "Ventilador",
+  "author": "FreshSense",
+  "pins": ["VCC", "GND", "IN"],
+  "display": {
+    "width": 120,
+    "height": 120
+  }
+}

@@ -34,26 +34,40 @@ El código del diagrama está en `docs/class-diagram.puml`. En el informe va en 
 
 ## Circuito
 
-| Pieza | Conexión | Para qué, según el informe |
-|---|---|---|
-| DHT22 VCC | 3V3 | Temperatura y humedad |
-| DHT22 GND | GND | Tierra |
-| DHT22 SDA | GPIO 12 | `temperatureC` y `humidityPct` |
-| Sensor de gas VCC | 5V | Etileno |
-| Sensor de gas GND | GND | Tierra |
-| Sensor de gas AOUT | GPIO 34 | `ethylenePpm` |
-| LED rojo | GPIO 27 y resistencia de 220 ohm | Encendido en `HIGH_ETHYLENE` |
-| Bocina | GPIO 25 | Pitido intermitente en `HIGH_ETHYLENE` |
-| Relé del ventilador VCC | 5V | Alimenta el módulo |
-| Relé del ventilador GND | GND | Tierra |
-| Relé del ventilador IN | GPIO 26 | Enciende el ventilador en `TEMP_RISK` |
+La protoboard junta las tierras. Del ESP32 sale un solo cable negro al riel GND, uno rojo de 3V3 y uno rojo de 5V. Cada pieza toma tierra de ese riel, no del pin GND del ESP32.
 
-Wokwi no tiene un sensor de etileno. El sensor de gas llena `ethylenePpm`, que es un campo obligatorio de `SensorReading`.
+| Pieza en el dibujo | Conexión | Qué es |
+|---|---|---|
+| DHT22 | Dato en GPIO 12, 3V3 y riel GND | Temperatura y humedad |
+| Placa azul «Etileno» | Señal en GPIO 34, 5V y riel GND | Sensor de gas, el campo `ethylenePpm` |
+| LED rojo «ALERTA» | GPIO 27 y resistencia de 220 ohm al riel GND | Aviso de `HIGH_ETHYLENE` |
+| Círculo negro «Bocina» | GPIO 25 y riel GND | Bocina de `HIGH_ETHYLENE` |
+| Módulo rojo «Relé» | GPIO 26, 5V y riel GND | Interruptor del ventilador. Se cierra en `TEMP_RISK` |
+| Pieza «Ventilador» | Mismo GPIO 26, 5V y riel GND | Ventilador dibujado en Wokwi. Las aspas giran cuando el relé está cerrado. En la placa física el motor es un ventilador |
+
+Wokwi no tiene un sensor de etileno. El sensor de gas llena `ethylenePpm`, que es un campo obligatorio de `SensorReading`. Wokwi tampoco tiene un ventilador que gire: `ventilador.chip.c` dibuja las aspas. En la placa física el motor es un ventilador y el relé le da la corriente.
+
+## Qué es cada pieza y si funciona
+
+El circuito mide y actúa en el simulador. Cada 10 segundos arma la lectura y decide los actuadores. El envío al servidor puede responder 401 mientras `DEVICE_TOKEN` sea un texto de relleno. El circuito local no depende de esa respuesta.
+
+| Pieza | Qué es | Qué hace al arrancar |
+|---|---|---|
+| DHT22 | Sensor de temperatura y humedad. El dato va por el cable verde al GPIO 12. | Arranca en 6.4 °C y 82 %. |
+| Etileno | Placa azul. Sensor de gas leído como etileno por el cable naranja, GPIO 34. | Abre cerca de 35 ppm. |
+| Protoboard | Rieles de 3.3 V, 5 V y tierra. Del ESP32 sale un cable de cada uno. | Las demás piezas toman corriente y tierra de ahí. |
+| Ventilador | Círculo de aspas. Pieza dibujada para el simulador. | Quieto, porque la cámara está a 6.4 °C. Gira si la temperatura pasa de 8 °C. |
+| Relé | Módulo rojo. Interruptor del ventilador, GPIO 26. | Abierto al arrancar. Se cierra junto con las aspas. |
+| Bocina | Círculo negro, GPIO 25. | Pita, porque el gas está por encima de 20 ppm. |
+| LED rojo «ALERTA» | Aviso de gas, GPIO 27, con resistencia de 220 ohm. | Encendido por la misma alerta de gas. |
+| ESP32 | Microcontrolador. Lee, actúa y manda la lectura por Wi-Fi. | Publica la lectura y el heartbeat cada 10 segundos. |
+
+Con esos valores de arranque el LED está encendido y la bocina pita. El ventilador sigue apagado.
 
 ## Cómo verlo
 
 1. Abre un proyecto ESP32 en [wokwi.com](https://wokwi.com).
-2. Copia `diagram.json`, `sketch.ino`, `FreshSenseNode.h` y `libraries.txt`.
+2. Copia `diagram.json`, `sketch.ino`, `FreshSenseNode.h`, `libraries.txt`, `ventilador.chip.c` y `ventilador.chip.json`.
 3. Inicia la simulación y abre el monitor serial.
 4. Cada 10 segundos aparece el JSON con saltos de línea y, debajo, el código HTTP de los dos POST.
 

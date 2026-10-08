@@ -6,15 +6,22 @@
     {
       "type": "board-esp32-devkit-c-v4",
       "id": "esp",
-      "top": 0,
-      "left": 19.24,
+      "top": -20,
+      "left": 340,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-breadboard-half",
+      "id": "bb1",
+      "top": 20,
+      "left": -160,
       "attrs": {}
     },
     {
       "type": "wokwi-dht22",
       "id": "dht22",
-      "top": -153.3,
-      "left": -187.8,
+      "top": -210,
+      "left": -40,
       "attrs": {
         "temperature": "6.4",
         "humidity": "82"
@@ -23,15 +30,15 @@
     {
       "type": "wokwi-gas-sensor",
       "id": "gas",
-      "top": 249.6,
-      "left": -230.2,
+      "top": 250,
+      "left": -320,
       "attrs": {}
     },
     {
       "type": "wokwi-led",
       "id": "ledAlert",
-      "top": 10,
-      "left": -20,
+      "top": -190,
+      "left": 180,
       "attrs": {
         "color": "red",
         "label": "ALERTA"
@@ -40,8 +47,8 @@
     {
       "type": "wokwi-resistor",
       "id": "resAlert",
-      "top": 48,
-      "left": 40,
+      "top": -140,
+      "left": 200,
       "attrs": {
         "value": "220"
       }
@@ -49,8 +56,8 @@
     {
       "type": "wokwi-buzzer",
       "id": "bz1",
-      "top": 86.4,
-      "left": 249.6,
+      "top": 250,
+      "left": 200,
       "attrs": {
         "volume": "0.1"
       }
@@ -58,39 +65,80 @@
     {
       "type": "wokwi-relay-module",
       "id": "fanRelay",
-      "top": 70,
-      "left": -150,
+      "top": 250,
+      "left": 20,
       "attrs": {
         "transistor": "pnp"
       }
     },
     {
+      "type": "chip-ventilador",
+      "id": "fan1",
+      "top": -150,
+      "left": -20,
+      "attrs": {}
+    },
+    {
       "type": "wokwi-text",
-      "id": "fanLabel",
-      "top": 160,
-      "left": -150,
+      "id": "labelFan",
+      "top": -80,
+      "left": 50,
       "attrs": {
         "text": "Ventilador"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "labelRelay",
+      "top": 360,
+      "left": 20,
+      "attrs": {
+        "text": "Rele"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "labelHorn",
+      "top": 360,
+      "left": 200,
+      "attrs": {
+        "text": "Bocina"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "labelGas",
+      "top": 360,
+      "left": -280,
+      "attrs": {
+        "text": "Etileno"
       }
     }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "dht22:VCC", "esp:3V3", "red", [ "v0" ] ],
-    [ "dht22:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "esp:GND.1", "bb1:tn.1", "black", [ "v0" ] ],
+    [ "esp:3V3", "bb1:tp.1", "red", [ "v0" ] ],
+    [ "esp:5V", "bb1:bp.1", "red", [ "v0" ] ],
+    [ "bb1:tn.30", "bb1:bn.30", "black", [ "v0" ] ],
+    [ "dht22:VCC", "bb1:tp.6", "red", [ "v0" ] ],
+    [ "dht22:GND", "bb1:tn.6", "black", [ "v0" ] ],
     [ "dht22:SDA", "esp:12", "green", [ "v0" ] ],
-    [ "gas:VCC", "esp:5V", "red", [ "v0" ] ],
-    [ "gas:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "gas:VCC", "bb1:bp.6", "red", [ "v0" ] ],
+    [ "gas:GND", "bb1:bn.6", "black", [ "v0" ] ],
     [ "gas:AOUT", "esp:34", "orange", [ "v0" ] ],
     [ "esp:27", "ledAlert:A", "red", [ "v0" ] ],
     [ "ledAlert:C", "resAlert:1", "red", [ "v0" ] ],
-    [ "resAlert:2", "esp:GND.2", "black", [ "v0" ] ],
+    [ "resAlert:2", "bb1:tn.12", "black", [ "v0" ] ],
     [ "esp:25", "bz1:1", "green", [ "v0" ] ],
-    [ "bz1:2", "esp:GND.2", "black", [ "v0" ] ],
-    [ "fanRelay:VCC", "esp:5V", "red", [ "v0" ] ],
-    [ "fanRelay:GND", "esp:GND.2", "black", [ "v0" ] ],
-    [ "fanRelay:IN", "esp:26", "blue", [ "v0" ] ]
+    [ "bz1:2", "bb1:bn.14", "black", [ "v0" ] ],
+    [ "fanRelay:VCC", "bb1:bp.18", "red", [ "v0" ] ],
+    [ "fanRelay:GND", "bb1:bn.18", "black", [ "v0" ] ],
+    [ "fanRelay:IN", "esp:26", "blue", [ "v0" ] ],
+    [ "fan1:VCC", "bb1:bp.24", "red", [ "v0" ] ],
+    [ "fan1:GND", "bb1:bn.24", "black", [ "v0" ] ],
+    [ "fan1:IN", "esp:26", "blue", [ "v0" ] ]
   ],
   "dependencies": {}
 }
