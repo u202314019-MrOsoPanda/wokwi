@@ -12,7 +12,25 @@ El dispositivo hace lo que define el informe en la rama `develop` de [1ASI0572-2
 6. Si el etileno supera 20 ppm (`HIGH_ETHYLENE`), enciende el LED rojo y hace sonar la bocina.
 7. Si la temperatura supera 8 °C (`TEMP_RISK`), el relé enciende el ventilador.
 
-El servidor sigue calculando `FRESH`, `AT_RISK` y `SPOILED`. En la cámara, el gas se avisa con el LED rojo y la bocina. El calor se corrige con el ventilador.
+El servidor sigue calculando `FRESH`, `AT_RISK` y `SPOILED`. En la cámara, el gas se avisa con el LED rojo y la bocina. Si la cámara se calienta, el relé enciende el ventilador. En la placa física ese motor es un ventilador: mueve el aire. No es un extractor.
+
+## Diagrama de clases
+
+El código del diagrama está en `docs/class-diagram.puml`. En el informe va en el apartado **5.6 IoT Device Design**, junto a la tabla de hardware. En el **4.2.7** solo se menciona que `HIGH_ETHYLENE` acciona el LED y la bocina, y que `TEMP_RISK` acciona el ventilador.
+
+## Qué hace cada parte del código
+
+| Parte | Archivo | Qué hace |
+|---|---|---|
+| `sketch.ino` | `sketch.ino` | Arranca el nodo y llama a `tick()` en cada vuelta. |
+| `ClimateSensor` | `FreshSenseNode.h` | Lee temperatura y humedad del DHT22 en el GPIO 12. |
+| `EthyleneSensor` | `FreshSenseNode.h` | Lee el sensor de gas en el GPIO 34 y lo convierte a `ethylenePpm`. |
+| `ReadingClock` | `FreshSenseNode.h` | Arma el `timestamp` de la lectura. |
+| `SensorReading` | `FreshSenseNode.h` | Junta los campos del informe, valida los rangos y escribe el JSON con saltos de línea. |
+| `AlertActuators` | `FreshSenseNode.h` | LED rojo (GPIO 27) y bocina (GPIO 25) cuando el etileno supera 20 ppm. |
+| `ColdRoomFan` | `FreshSenseNode.h` | Relé del ventilador (GPIO 26) cuando la temperatura supera 8 °C. |
+| `DeviceLink` | `FreshSenseNode.h` | Wi-Fi y los dos POST: la lectura y el heartbeat. |
+| `FreshSenseNode` | `FreshSenseNode.h` | Cada 10 segundos mide, decide los actuadores y envía. |
 
 ## Circuito
 

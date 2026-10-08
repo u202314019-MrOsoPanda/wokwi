@@ -188,8 +188,11 @@ class SensorReading {
   }
 };
 
-// LED rojo y bocina. Se activan juntos cuando el etileno indica HIGH_ETHYLENE.
-// El LED queda fijo. La bocina pita para que se oiga la alerta dentro de la camara.
+// Actuadores de aviso por gas. No mueven aire.
+// Si ethylenePpm supera 20 ppm, la alerta del informe es HIGH_ETHYLENE:
+// el alimento esta por descomponerse. Entonces el LED rojo queda encendido
+// y la bocina pita. El LED usa GPIO 27 con resistencia de 220 ohm.
+// La bocina usa GPIO 25 y cambia de estado cada 400 ms para que se oiga.
 class AlertActuators {
  public:
   void begin() {
@@ -199,6 +202,7 @@ class AlertActuators {
     digitalWrite(BUZZER_PIN, LOW);
   }
 
+  // active en true deja el LED rojo fijo y permite el pitido de la bocina.
   void setAlert(bool active) {
     alerting = active;
     digitalWrite(LED_ALERT_PIN, active ? HIGH : LOW);
@@ -207,6 +211,7 @@ class AlertActuators {
     }
   }
 
+  // Se llama en cada vuelta del loop para alternar la bocina sin frenar el envio.
   void tick() {
     if (!alerting) {
       return;
@@ -230,8 +235,11 @@ class AlertActuators {
   unsigned long lastBeepAt = 0;
 };
 
-// Rele del ventilador. El ESP32 no mueve el motor: solo cierra el rele
-// cuando la temperatura indica TEMP_RISK.
+// Ventilador de la camara. En el prototipo fisico el motor es un ventilador,
+// no un extractor: mueve el aire cuando la camara se calienta.
+// El ESP32 no alimenta ese motor. GPIO 26 entra al rele (pin IN) y el rele
+// cierra la corriente del ventilador. Se enciende con TEMP_RISK,
+// cuando la temperatura pasa de 8 C.
 class ColdRoomFan {
  public:
   void begin() {
@@ -239,13 +247,15 @@ class ColdRoomFan {
     digitalWrite(FAN_PIN, LOW);
   }
 
+  // running en true cierra el rele y el ventilador gira.
   void setRunning(bool running) {
     digitalWrite(FAN_PIN, running ? HIGH : LOW);
   }
 };
 
 // Envia la telemetria y el heartbeat.
-// El estado de frescura lo calcula el servidor. Los actuadores solo avisan HIGH_ETHYLENE.
+// FRESH, AT_RISK y SPOILED los calcula el servidor.
+// Esta clase no enciende el LED, la bocina ni el ventilador.
 class DeviceLink {
  public:
   bool connectWifi() {

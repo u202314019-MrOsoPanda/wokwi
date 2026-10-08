@@ -1,10 +1,10 @@
 #include "FreshSenseNode.h"
 
 // Arranque del dispositivo FreshSense.
-// La medicion y el envio estan en FreshSenseNode.h.
-// El informe (4.2.7 y 4.2.4) define la lectura y el heartbeat.
-// HIGH_ETHYLENE enciende el LED rojo y la bocina.
-// TEMP_RISK enciende el ventilador.
+// sketch.ino solo crea el nodo. La medicion, los actuadores y el envio
+// estan explicados clase por clase en FreshSenseNode.h.
+// HIGH_ETHYLENE: LED rojo y bocina.
+// TEMP_RISK: rele del ventilador. En la placa fisica el motor es un ventilador.
 
 FreshSenseNode node;
 
