@@ -30,8 +30,8 @@
     {
       "type": "wokwi-led",
       "id": "ledAlert",
-      "top": -61.2,
-      "left": 261.8,
+      "top": 163.2,
+      "left": 86.6,
       "attrs": {
         "color": "red",
         "label": "ALERTA"
@@ -40,8 +40,8 @@
     {
       "type": "wokwi-resistor",
       "id": "resAlert",
-      "top": -14.4,
-      "left": 201.6,
+      "top": 134.4,
+      "left": 144,
       "attrs": {
         "value": "220"
       }
