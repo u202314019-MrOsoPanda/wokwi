@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "author": "FreshSense",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 19.24,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht22",
+      "top": 34.5,
+      "left": -168.6,
+      "attrs": {
+        "temperature": "6.4",
+        "humidity": "82"
+      }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "dht22:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "dht22:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "dht22:SDA", "esp:12", "green", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}

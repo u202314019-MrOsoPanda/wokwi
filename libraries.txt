@@ -1,0 +1,4 @@
+# Wokwi Library List
+# DHT sensor library for ESPx is the build that reads a DHT22 reliably on ESP32 in Wokwi.
+DHT sensor library for ESPx
+ArduinoJson@6.21.5
