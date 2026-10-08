@@ -27,6 +27,12 @@ class ReadingClock {
   + stamp() : String
 }
 
+class AlertActuators {
+  + begin()
+  + setAlert(active)
+  + tick()
+}
+
 class DeviceLink {
   + connectWifi() : bool
   + postReading(payload) : int
@@ -40,13 +46,13 @@ class FreshSenseNode {
 
 FreshSenseNode *-- ClimateSensor
 FreshSenseNode *-- EthyleneSensor
+FreshSenseNode *-- AlertActuators
 FreshSenseNode *-- ReadingClock
 FreshSenseNode *-- DeviceLink
 FreshSenseNode ..> SensorReading
 
-note right of SensorReading
-  Informe 4.2.7.
-  El servidor evalua umbrales
-  y emite las alertas.
+note right of AlertActuators
+  HIGH_ETHYLENE, por encima de 20 ppm.
+  LED rojo fijo y bocina intermitente.
 end note
 @enduml

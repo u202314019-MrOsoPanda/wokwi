@@ -26,6 +26,34 @@
       "top": 249.6,
       "left": -230.2,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledAlert",
+      "top": -61.2,
+      "left": 261.8,
+      "attrs": {
+        "color": "red",
+        "label": "ALERTA"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "resAlert",
+      "top": -14.4,
+      "left": 201.6,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 86.4,
+      "left": 249.6,
+      "attrs": {
+        "volume": "0.1"
+      }
     }
   ],
   "connections": [
@@ -36,7 +64,12 @@
     [ "dht22:SDA", "esp:12", "green", [ "v0" ] ],
     [ "gas:VCC", "esp:5V", "red", [ "v0" ] ],
     [ "gas:GND", "esp:GND.2", "black", [ "v0" ] ],
-    [ "gas:AOUT", "esp:34", "orange", [ "v0" ] ]
+    [ "gas:AOUT", "esp:34", "orange", [ "v0" ] ],
+    [ "esp:27", "ledAlert:A", "red", [ "v0" ] ],
+    [ "ledAlert:C", "resAlert:1", "red", [ "v0" ] ],
+    [ "resAlert:2", "esp:GND.2", "black", [ "v0" ] ],
+    [ "esp:25", "bz1:1", "green", [ "v0" ] ],
+    [ "bz1:2", "esp:GND.2", "black", [ "v0" ] ]
   ],
   "dependencies": {}
 }

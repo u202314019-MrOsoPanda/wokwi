@@ -8,8 +8,8 @@
 //           esten en un rango fisicamente posible.
 //   4.2.7.2 POST /api/v1/sensor-readings. El servidor valida el token (TS41).
 //   4.2.4.2 POST /api/v1/devices/{id}/heartbeat para no pasar a OFFLINE (US06).
-// La alerta (HIGH_ETHYLENE, TEMP_RISK, NEARING_EXPIRY) y el estado
-// FRESH / AT_RISK / SPOILED los calcula el servidor, no esta placa.
+// El servidor calcula FRESH, AT_RISK y SPOILED.
+// En la placa, la alerta HIGH_ETHYLENE enciende el LED rojo y la bocina.
 
 #include <ArduinoJson.h>
 #include <DHTesp.h>
@@ -22,6 +22,8 @@
 // El sensor de gas: etileno en ppm. Salida analogica en GPIO 34 (ADC1).
 static const int CLIMATE_PIN = 12;
 static const int ETHYLENE_PIN = 34;
+static const int LED_ALERT_PIN = 27;
+static const int BUZZER_PIN = 25;
 
 // Identificador que el servidor asigna al vincular el dispositivo (US31).
 // Hay que reemplazarlo por el UUID real del alta.
@@ -60,6 +62,13 @@ static const float HUMIDITY_MIN = 0.0f;
 static const float HUMIDITY_MAX = 100.0f;
 static const float ETHYLENE_MIN_PPM = 0.0f;
 static const float ETHYLENE_MAX_PPM = 10000.0f;
+
+// Umbral local de HIGH_ETHYLENE. En el informe, maxEthylenePpm vive en la zona.
+// Por encima de este valor el alimento esta por descomponerse y suenan los actuadores.
+// En Wokwi el sensor de gas abre cerca de 35 ppm, asi que el LED y la bocina
+// parten encendidos. Al bajar el control del gas, se apagan.
+static const float ETHYLENE_ALERT_PPM = 20.0f;
+static const unsigned long BEEP_HALF_MS = 400;
 
 // Lee temperatureC y humidityPct.
 class ClimateSensor {
@@ -172,8 +181,50 @@ class SensorReading {
   }
 };
 
-// Envia la telemetria y el heartbeat. No evalua umbrales:
-// eso lo hace ThresholdEvaluationService en el servidor.
+// LED rojo y bocina. Se activan juntos cuando el etileno indica HIGH_ETHYLENE.
+// El LED queda fijo. La bocina pita para que se oiga la alerta dentro de la camara.
+class AlertActuators {
+ public:
+  void begin() {
+    pinMode(LED_ALERT_PIN, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
+    digitalWrite(LED_ALERT_PIN, LOW);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+
+  void setAlert(bool active) {
+    alerting = active;
+    digitalWrite(LED_ALERT_PIN, active ? HIGH : LOW);
+    if (!active) {
+      digitalWrite(BUZZER_PIN, LOW);
+    }
+  }
+
+  void tick() {
+    if (!alerting) {
+      return;
+    }
+    unsigned long now = millis();
+    if (now - lastBeepAt < BEEP_HALF_MS) {
+      return;
+    }
+    lastBeepAt = now;
+    buzzerOn = !buzzerOn;
+    digitalWrite(BUZZER_PIN, buzzerOn ? HIGH : LOW);
+  }
+
+  bool isAlerting() const {
+    return alerting;
+  }
+
+ private:
+  bool alerting = false;
+  bool buzzerOn = false;
+  unsigned long lastBeepAt = 0;
+};
+
+// Envia la telemetria y el heartbeat.
+// El estado de frescura lo calcula el servidor. Los actuadores solo avisan HIGH_ETHYLENE.
 class DeviceLink {
  public:
   bool connectWifi() {
@@ -230,6 +281,7 @@ class FreshSenseNode {
     Serial.begin(115200);
     climate.begin();
     ethylene.begin();
+    actuators.begin();
     link.connectWifi();
     clock.begin();
     nextTickAt = millis();
@@ -237,6 +289,7 @@ class FreshSenseNode {
   }
 
   void tick() {
+    actuators.tick();
     if (millis() < nextTickAt) {
       return;
     }
@@ -265,8 +318,17 @@ class FreshSenseNode {
     Serial.println(reading.toJson());
 
     if (!reading.isValid()) {
+      actuators.setAlert(false);
       Serial.println("isValid() rechazo la lectura. No se envia.");
       return;
+    }
+
+    bool highEthylene = reading.ethylenePpm > ETHYLENE_ALERT_PPM;
+    actuators.setAlert(highEthylene);
+    if (highEthylene) {
+      Serial.println("HIGH_ETHYLENE: LED rojo encendido y bocina sonando.");
+    } else {
+      Serial.println("Etileno en rango: LED rojo apagado y bocina en silencio.");
     }
 
     int readingCode = link.postReading(reading.toJson());
@@ -288,6 +350,7 @@ class FreshSenseNode {
 
   ClimateSensor climate;
   EthyleneSensor ethylene;
+  AlertActuators actuators;
   ReadingClock clock;
   DeviceLink link;
   unsigned long nextTickAt;
