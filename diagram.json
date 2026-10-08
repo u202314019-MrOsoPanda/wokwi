@@ -54,6 +54,24 @@
       "attrs": {
         "volume": "0.1"
       }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "fanRelay",
+      "top": 70,
+      "left": -150,
+      "attrs": {
+        "transistor": "pnp"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "fanLabel",
+      "top": 160,
+      "left": -150,
+      "attrs": {
+        "text": "Ventilador"
+      }
     }
   ],
   "connections": [
@@ -69,7 +87,10 @@
     [ "ledAlert:C", "resAlert:1", "red", [ "v0" ] ],
     [ "resAlert:2", "esp:GND.2", "black", [ "v0" ] ],
     [ "esp:25", "bz1:1", "green", [ "v0" ] ],
-    [ "bz1:2", "esp:GND.2", "black", [ "v0" ] ]
+    [ "bz1:2", "esp:GND.2", "black", [ "v0" ] ],
+    [ "fanRelay:VCC", "esp:5V", "red", [ "v0" ] ],
+    [ "fanRelay:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "fanRelay:IN", "esp:26", "blue", [ "v0" ] ]
   ],
   "dependencies": {}
 }

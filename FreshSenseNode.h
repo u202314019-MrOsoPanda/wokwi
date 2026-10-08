@@ -9,7 +9,8 @@
 //   4.2.7.2 POST /api/v1/sensor-readings. El servidor valida el token (TS41).
 //   4.2.4.2 POST /api/v1/devices/{id}/heartbeat para no pasar a OFFLINE (US06).
 // El servidor calcula FRESH, AT_RISK y SPOILED.
-// En la placa, la alerta HIGH_ETHYLENE enciende el LED rojo y la bocina.
+// En la placa, HIGH_ETHYLENE enciende el LED rojo y la bocina.
+// TEMP_RISK enciende el ventilador a traves de un rele.
 
 #include <ArduinoJson.h>
 #include <DHTesp.h>
@@ -24,6 +25,7 @@ static const int CLIMATE_PIN = 12;
 static const int ETHYLENE_PIN = 34;
 static const int LED_ALERT_PIN = 27;
 static const int BUZZER_PIN = 25;
+static const int FAN_PIN = 26;
 
 // Identificador que el servidor asigna al vincular el dispositivo (US31).
 // Hay que reemplazarlo por el UUID real del alta.
@@ -69,6 +71,11 @@ static const float ETHYLENE_MAX_PPM = 10000.0f;
 // parten encendidos. Al bajar el control del gas, se apagan.
 static const float ETHYLENE_ALERT_PPM = 20.0f;
 static const unsigned long BEEP_HALF_MS = 400;
+
+// Umbral local de TEMP_RISK. En el informe, maxTemperatureC vive en la zona.
+// Por encima de 8 C la camara ya no esta fria y el rele enciende el ventilador.
+// El DHT22 abre en 6.4 C, asi que el ventilador parte apagado.
+static const float TEMP_FAN_C = 8.0f;
 
 // Lee temperatureC y humidityPct.
 class ClimateSensor {
@@ -223,6 +230,20 @@ class AlertActuators {
   unsigned long lastBeepAt = 0;
 };
 
+// Rele del ventilador. El ESP32 no mueve el motor: solo cierra el rele
+// cuando la temperatura indica TEMP_RISK.
+class ColdRoomFan {
+ public:
+  void begin() {
+    pinMode(FAN_PIN, OUTPUT);
+    digitalWrite(FAN_PIN, LOW);
+  }
+
+  void setRunning(bool running) {
+    digitalWrite(FAN_PIN, running ? HIGH : LOW);
+  }
+};
+
 // Envia la telemetria y el heartbeat.
 // El estado de frescura lo calcula el servidor. Los actuadores solo avisan HIGH_ETHYLENE.
 class DeviceLink {
@@ -282,6 +303,7 @@ class FreshSenseNode {
     climate.begin();
     ethylene.begin();
     actuators.begin();
+    fan.begin();
     link.connectWifi();
     clock.begin();
     nextTickAt = millis();
@@ -319,12 +341,20 @@ class FreshSenseNode {
 
     if (!reading.isValid()) {
       actuators.setAlert(false);
+      fan.setRunning(false);
       Serial.println("isValid() rechazo la lectura. No se envia.");
       return;
     }
 
     bool highEthylene = reading.ethylenePpm > ETHYLENE_ALERT_PPM;
     actuators.setAlert(highEthylene);
+    bool warmRoom = reading.temperatureC > TEMP_FAN_C;
+    fan.setRunning(warmRoom);
+    if (warmRoom) {
+      Serial.println("TEMP_RISK: ventilador encendido.");
+    } else {
+      Serial.println("Temperatura en rango: ventilador apagado.");
+    }
     if (highEthylene) {
       Serial.println("HIGH_ETHYLENE: LED rojo encendido y bocina sonando.");
     } else {
@@ -351,6 +381,7 @@ class FreshSenseNode {
   ClimateSensor climate;
   EthyleneSensor ethylene;
   AlertActuators actuators;
+  ColdRoomFan fan;
   ReadingClock clock;
   DeviceLink link;
   unsigned long nextTickAt;

@@ -33,6 +33,11 @@ class AlertActuators {
   + tick()
 }
 
+class ColdRoomFan {
+  + begin()
+  + setRunning(running)
+}
+
 class DeviceLink {
   + connectWifi() : bool
   + postReading(payload) : int
@@ -47,6 +52,7 @@ class FreshSenseNode {
 FreshSenseNode *-- ClimateSensor
 FreshSenseNode *-- EthyleneSensor
 FreshSenseNode *-- AlertActuators
+FreshSenseNode *-- ColdRoomFan
 FreshSenseNode *-- ReadingClock
 FreshSenseNode *-- DeviceLink
 FreshSenseNode ..> SensorReading
@@ -54,5 +60,10 @@ FreshSenseNode ..> SensorReading
 note right of AlertActuators
   HIGH_ETHYLENE, por encima de 20 ppm.
   LED rojo fijo y bocina intermitente.
+end note
+
+note right of ColdRoomFan
+  TEMP_RISK, por encima de 8 C.
+  El rele enciende el ventilador.
 end note
 @enduml
